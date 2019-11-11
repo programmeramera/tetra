@@ -28,12 +28,12 @@ fn main() -> tetra::Result {
 
 trait Scene {
     fn update(&mut self, ctx: &mut Context) -> tetra::Result<Transition>;
-    fn draw(&mut self, ctx: &mut Context, dt: f64) -> tetra::Result;
+    fn draw(&mut self, ctx: &mut Context, dt: f64);
 }
 
 enum Transition {
     None,
-    Push(Box<dyn Scene>),
+    Push(Box<dyn Scene>, bool),
     Pop,
 }
 
@@ -47,7 +47,7 @@ struct GameState {
 
 impl GameState {
     fn new(ctx: &mut Context) -> tetra::Result<GameState> {
-        let initial_scene = MenuScene::new(ctx)?;
+        let initial_scene = SplashScene::new()?;
 
         Ok(GameState {
             scenes: vec![Box::new(initial_scene)],
@@ -63,8 +63,11 @@ impl State for GameState {
         match self.scenes.last_mut() {
             Some(active_scene) => match active_scene.update(ctx)? {
                 Transition::None => {}
-                Transition::Push(s) => {
-                    self.scenes.push(s);
+                Transition::Push(scene, remove_self) => {
+                    if remove_self {
+                        self.scenes.pop();
+                    }
+                    self.scenes.push(scene);
                 }
                 Transition::Pop => {
                     self.scenes.pop();
@@ -80,7 +83,7 @@ impl State for GameState {
         graphics::set_canvas(ctx, self.scaler.canvas());
 
         match self.scenes.last_mut() {
-            Some(active_scene) => active_scene.draw(ctx, dt)?,
+            Some(active_scene) => active_scene.draw(ctx, dt),
             None => window::quit(ctx),
         };
 
@@ -93,6 +96,36 @@ impl State for GameState {
 }
 
 // === Splash Scene
+
+struct SplashScene {
+    text: Text,
+    counter: i32
+}
+
+impl SplashScene {
+    fn new() -> tetra::Result<SplashScene> {
+        Ok(SplashScene {
+            text: Text::new("Loading...", Font::default(), 36.0),
+            counter: 0
+        })
+    }
+}
+
+impl Scene for SplashScene {
+    fn update(&mut self, ctx: &mut Context) -> tetra::Result<Transition> {
+        self.counter += 1;
+        if self.counter >= 60 {
+            Ok(Transition::Push(Box::new(MenuScene::new(ctx)?),true))
+        } else {
+            Ok(Transition::None)
+        }
+    }
+
+    fn draw(&mut self, ctx: &mut Context, _dt: f64) {
+        graphics::clear(ctx, Color::rgb(0.094, 0.11, 0.16));
+        graphics::draw(ctx, &self.text, Vec2::new(16.0, 16.0));
+    }
+}
 
 // === Loading Scene
 
@@ -119,7 +152,7 @@ impl MenuScene {
 impl Scene for MenuScene {
     fn update(&mut self, ctx: &mut Context) -> tetra::Result<Transition> {
         if input::is_key_pressed(ctx, Key::Space) {
-            Ok(Transition::Push(Box::new(GameScene::new(ctx)?)))
+            Ok(Transition::Push(Box::new(GameScene::new(ctx)?),false))
         } else if input::is_key_pressed(ctx, Key::Escape) {
             Ok(Transition::Pop)
         } else {
@@ -127,11 +160,9 @@ impl Scene for MenuScene {
         }
     }
 
-    fn draw(&mut self, ctx: &mut Context, _dt: f64) -> tetra::Result {
+    fn draw(&mut self, ctx: &mut Context, _dt: f64) {
         graphics::clear(ctx, Color::rgb(0.094, 0.11, 0.16));
         graphics::draw(ctx, &self.title_text, Vec2::new(16.0, 16.0));
-
-        Ok(())
     }
 }
 
@@ -158,10 +189,8 @@ impl Scene for GameScene {
         }
     }
 
-    fn draw(&mut self, ctx: &mut Context, _dt: f64) -> tetra::Result {
+    fn draw(&mut self, ctx: &mut Context, _dt: f64) {
         graphics::clear(ctx, Color::rgb(0.094, 0.51, 0.56));
         graphics::draw(ctx, &self.text, Vec2::new(16.0, 16.0));
-
-        Ok(())
     }
 }
